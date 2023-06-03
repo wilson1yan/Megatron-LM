@@ -36,6 +36,11 @@ def parse_args(extra_args_provider=None, ignore_unknown_args=False):
     parser = _add_transformer_engine_args(parser)
     parser = _add_retro_args(parser)
 
+    parser.add_argument("--seq_len", type=int, default=4096)
+    parser.add_argument("--batch-size-per-rank", type=int, default=1)
+    parser.add_argument("--warmup-iters", type=int, default=10)
+    parser.add_argument("--trial-iters", type=int, default=100)
+
     # Custom arguments.
     if extra_args_provider is not None:
         parser = extra_args_provider(parser)
