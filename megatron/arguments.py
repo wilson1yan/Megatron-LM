@@ -807,7 +807,7 @@ def _add_initialization_args(parser):
 def _add_learning_rate_args(parser):
     group = parser.add_argument_group(title='learning rate')
 
-    group.add_argument('--lr', type=float, default=None,
+    group.add_argument('--lr', type=float, default=1e-4,
                        help='Initial learning rate. Depending on decay style '
                        'and initial warmup, the learing rate at each '
                        'iteration would be different.')

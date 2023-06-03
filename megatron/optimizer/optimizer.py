@@ -280,24 +280,24 @@ class MegatronOptimizer(ABC):
         """All-reduce all grads, and all-reduce embeddings."""
 
         # All-reduce layer-norm grads (for sequence parallelism).
-        timers('layernorm-grads-all-reduce', log_level=1).start(
-            barrier=args.barrier_with_L1_time)
+        #timers('layernorm-grads-all-reduce', log_level=1).start(
+        #    barrier=args.barrier_with_L1_time)
         self.allreduce_layernorm_grads(args)
-        timers('layernorm-grads-all-reduce').stop()
+        #timers('layernorm-grads-all-reduce').stop()
 
         # All-reduce if needed.
         if args.DDP_impl == 'local':
-            timers('grads-all-reduce', log_level=1).start(
-                barrier=args.barrier_with_L1_time)
+           # timers('grads-all-reduce', log_level=1).start(
+           #     barrier=args.barrier_with_L1_time)
             for model in self.models:
                 model.allreduce_gradients()
-            timers('grads-all-reduce').stop()
+           # timers('grads-all-reduce').stop()
 
         # All-reduce embedding grads.
-        timers('embedding-grads-all-reduce', log_level=1).start(
-            barrier=args.barrier_with_L1_time)
+        #timers('embedding-grads-all-reduce', log_level=1).start(
+        #    barrier=args.barrier_with_L1_time)
         self.allreduce_embedding_grads(args)
-        timers('embedding-grads-all-reduce').stop()
+       # timers('embedding-grads-all-reduce').stop()
 
 
 class MixedPrecisionOptimizer(MegatronOptimizer):
@@ -723,8 +723,8 @@ class FP32Optimizer(MegatronOptimizer):
         Always return successful since there is no overflow."""
 
         # Copy main_grads to grads.
-        timers('optimizer-copy-to-main-grad', log_level=1).start(
-            barrier=args.barrier_with_L1_time)
+        #timers('optimizer-copy-to-main-grad', log_level=1).start(
+        #    barrier=args.barrier_with_L1_time)
         if self.params_have_main_grad:
             for param_group in self.optimizer.param_groups:
                 for param in param_group['params']:
@@ -735,28 +735,28 @@ class FP32Optimizer(MegatronOptimizer):
                     # persist and therefore should not be deallocated.)
                     if not self.use_contiguous_buffers_in_local_ddp:
                         param.main_grad = None
-        timers('optimizer-copy-to-main-grad').stop()
+        #timers('optimizer-copy-to-main-grad').stop()
 
         # Clip gradients.
-        timers('optimizer-clip-main-grad', log_level=1).start(
-            barrier=args.barrier_with_L1_time)
+        #timers('optimizer-clip-main-grad', log_level=1).start(
+        #    barrier=args.barrier_with_L1_time)
         grad_norm = None
         if self.clip_grad > 0.0:
             grad_norm = self.clip_grad_norm(self.clip_grad)
-        timers('optimizer-clip-main-grad').stop()
+        #timers('optimizer-clip-main-grad').stop()
 
         # count the zeros in the grads
-        timers('optimizer-count-zeros', log_level=1).start(
-            barrier=args.barrier_with_L1_time)
+        #timers('optimizer-count-zeros', log_level=1).start(
+        #    barrier=args.barrier_with_L1_time)
         num_zeros_in_grad = self.count_zeros() if \
                             self.log_num_zeros_in_grad else None
-        timers('optimizer-count-zeros').stop()
+        #timers('optimizer-count-zeros').stop()
 
         # Update parameters.
-        timers('optimizer-inner-step', log_level=1).start(
-            barrier=args.barrier_with_L1_time)
+        #timers('optimizer-inner-step', log_level=1).start(
+        #    barrier=args.barrier_with_L1_time)
         self.optimizer.step()
-        timers('optimizer-inner-step').stop()
+        #timers('optimizer-inner-step').stop()
 
         # No overflow for FP32 optimizer.
         return True, grad_norm, num_zeros_in_grad

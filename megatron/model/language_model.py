@@ -359,7 +359,7 @@ class TransformerLanguageModel(MegatronModule):
         if self.pre_process:
             self.embedding = Embedding(self.hidden_size,
                                        args.padded_vocab_size,
-                                       args.max_position_embeddings,
+                                       args.seq_len,
                                        args.hidden_dropout,
                                        self.init_method,
                                        self.num_tokentypes)

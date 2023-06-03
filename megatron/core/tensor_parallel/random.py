@@ -116,6 +116,8 @@ class CudaRNGStatesTracker:
     def fork(self, name=_MODEL_PARALLEL_RNG_TRACKER_NAME):
         """Fork the cuda rng state, perform operations, and exit with
         the original state."""
+        yield
+        return
         # Check if we have added the state
         if name not in self.states_:
             raise Exception('cuda rng state {} is not added'.format(name))

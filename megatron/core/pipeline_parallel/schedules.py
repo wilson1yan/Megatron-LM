@@ -242,7 +242,7 @@ def forward_step(forward_step_func,
     # If T5 model (or other model with encoder and decoder)
     # and in decoder stack, then send encoder_hidden_state
     # downstream as well.
-    model_type = get_model_type(model)
+    model_type = ModelType.encoder_or_decoder #get_model_type(model)
 
     if parallel_state.is_pipeline_stage_after_split() and \
             model_type == ModelType.encoder_and_decoder:
@@ -362,7 +362,7 @@ def forward_backward_no_pipelining(*,
     if no_sync_func is None:
         no_sync_func = contextlib.nullcontext
 
-    model_type = get_model_type(model)
+    model_type = ModelType.encoder_or_decoder #get_model_type(model)
 
     forward_data_store = []
     input_tensor, output_tensor_grad = None, None
