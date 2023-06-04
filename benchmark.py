@@ -18,6 +18,24 @@ from megatron.optimizer import get_megatron_optimizer
 from megatron.core.pipeline_parallel import get_forward_backward_func
 
 
+def init_head_parallel():
+    world_size = dist.get_world_size()
+    rank = dist.get_rank()
+    n_heads, head_dim = args.num_attention_heads, args.kv_channels
+    if n_heads >= world_size:
+        ranks = range(rank, rank + 1)
+    else:
+        assert world_size % n_heads == 0
+        assert (n_heads * head_dim) % world_size == 0
+        group_size = world_size // n_heads
+        if rank == 0:
+            print(f'> initialized head parallel with size {group_size}')
+        start_rank = rank // group_size * group_size
+        ranks = range(start_rank, start_rank + group_size)
+    group = dist.new_group(ranks)
+    mpu.set_head_model_parallel_group(group)
+
+
 def main(args):
     device = torch.device(f'cuda:{local_rank}')
     torch.cuda.set_device(device)
@@ -29,6 +47,7 @@ def main(args):
               f'{mpu.get_data_parallel_world_size()}')
         print(f'> initialized tensor model parallel with size '
               f'{mpu.get_tensor_model_parallel_world_size()}')
+    init_head_parallel()
 
 #    set_jit_fusion_options()
 

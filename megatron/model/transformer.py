@@ -223,15 +223,20 @@ class CoreAttention(MegatronModule):
 
         # Per attention head and per partition values.
         world_size = mpu.get_tensor_model_parallel_world_size()
-        self.hidden_size_per_partition = core.utils.divide(projection_size,
-                                                           world_size)
-        self.hidden_size_per_attention_head = core.utils.divide(
-            projection_size, args.num_attention_heads)
-        self.num_attention_heads_per_partition = core.utils.divide(
-            args.num_attention_heads, world_size)
+        head_world_size = mpu.get_head_model_parallel_world_size()
+        if head_world_size == 1:
+            self.hidden_size_per_attention_head = core.utils.divide(
+                projection_size, args.num_attention_heads)
+            self.num_attention_heads_per_partition = core.utils.divide(
+                args.num_attention_heads, world_size)
+        else:
+            assert projection_size % (args.num_attention_heads * head_world_size) == 0
+            self.hidden_size_per_attention_head = projection_size // args.num_attention_heads // head_world_size
+            self.num_attention_heads_per_partition = 1
+        self.head_world_size = head_world_size
 
         coeff = None
-        self.norm_factor = math.sqrt(self.hidden_size_per_attention_head)
+        self.norm_factor = math.sqrt(self.hidden_size_per_attention_head * head_world_size)
         if self.apply_query_key_layer_scaling:
             coeff = self.layer_number
             self.norm_factor *= coeff
@@ -280,6 +285,9 @@ class CoreAttention(MegatronModule):
             query_layer.transpose(0, 1),   # [b * np, sq, hn]
             key_layer.transpose(0, 1).transpose(1, 2),  # [b * np, hn, sk]
             beta=0.0, alpha=(1.0/self.norm_factor))
+        
+        if self.head_world_size > 1:
+            torch.distributed.all_reduce(matmul_result, group=mpu.get_head_model_parallel_group())
 
         # change view to [b, np, sq, sk]
         attention_scores = matmul_result.view(*output_size)
@@ -436,10 +444,16 @@ class ParallelAttention(MegatronModule):
 
         # Per attention head and per partition values.
         world_size = mpu.get_tensor_model_parallel_world_size()
-        self.hidden_size_per_attention_head = core.utils.divide(
-            projection_size, args.num_attention_heads)
-        self.num_attention_heads_per_partition = core.utils.divide(
-            args.num_attention_heads, world_size)
+        head_world_size = mpu.get_head_model_parallel_world_size()
+        if head_world_size == 1:
+            self.hidden_size_per_attention_head = core.utils.divide(
+                projection_size, args.num_attention_heads)
+            self.num_attention_heads_per_partition = core.utils.divide(
+                args.num_attention_heads, world_size)
+        else:
+            assert projection_size % (args.num_attention_heads * head_world_size) == 0
+            self.hidden_size_per_attention_head = projection_size // args.num_attention_heads // head_world_size
+            self.num_attention_heads_per_partition = 1
 
         # Strided linear layer.
         if attention_type == AttnType.self_attn:

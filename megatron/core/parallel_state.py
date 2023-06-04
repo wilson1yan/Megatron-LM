@@ -7,6 +7,8 @@ from typing import Optional
 
 from .utils import GlobalMemoryBuffer
 
+_HEAD_MODEL_PARALLEL_GROUP = None
+
 # Intra-layer model parallel group that the current rank belongs to.
 _TENSOR_MODEL_PARALLEL_GROUP = None
 # Inter-layer model parallel group that the current rank belongs to.
@@ -263,6 +265,18 @@ def initialize_model_parallel(
 def is_unitialized():
     """Useful for code segments that may be accessed with or without mpu initialization"""
     return _DATA_PARALLEL_GROUP is None
+
+    
+def set_head_model_parallel_group(group):
+    global _HEAD_MODEL_PARALLEL_GROUP
+    _HEAD_MODEL_PARALLEL_GROUP = group
+
+def get_head_model_parallel_group():
+    assert _HEAD_MODEL_PARALLEL_GROUP is not None
+    return _HEAD_MODEL_PARALLEL_GROUP
+
+def get_head_model_parallel_world_size():
+    return torch.distributed.get_world_size(group=get_head_model_parallel_group())
 
 
 def model_parallel_is_initialized():
