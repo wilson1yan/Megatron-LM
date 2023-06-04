@@ -1,6 +1,8 @@
 import os
+import math
 from datetime import datetime
 import subprocess
+import yaml
 
 import torch
 from torch.nn.parallel.distributed import DistributedDataParallel as torchDDP
@@ -34,12 +36,9 @@ def main(args):
     for param in model.parameters():
         tensor_parallel.set_defaults_if_not_set_tensor_model_parallel_attributes(param)
 
-    if mpu.get_data_parallel_rank() == 0:
-        print(' > number of parameters on (tensor, pipeline) '
-              'model parallel rank ({}, {}): {}'.format(
-            mpu.get_tensor_model_parallel_rank(),
-            mpu.get_pipeline_model_parallel_rank(),
-            sum([p.nelement() for p in model.parameters()]), flush=True))
+    if rank == 0:
+        print(' > number of parameters: {}'.format(
+            sum([p.nelement() for p in model.parameters()]) * mpu.get_tensor_model_parallel_world_size(), flush=True))
 
     model.cuda(torch.cuda.current_device())
 
@@ -148,7 +147,11 @@ if __name__ == "__main__":
     os.environ["RANK"] = str(rank)
 
     args = parse_args()
-    args.padded_vocab_size = 2048
+    config = yaml.safe_load(open(args.config, 'r'))
+    ards_d = vars(args)
+    ards_d.update(**config)
+
+    args.padded_vocab_size = math.ceil(2048 / args.tensor_model_parallel_size) * args.tensor_model_parallel_size
     args.params_dtype = torch.float32
     args.model_type = ModelType.encoder_or_decoder
     args.virtual_pipeline_model_parallel_size = None

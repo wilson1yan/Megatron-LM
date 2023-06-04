@@ -1,0 +1,5 @@
+num_layers: 24
+hidden_size: 1024
+ffn_hidden_size: 4096
+num_attention_heads: 16
+kv_channels: 64

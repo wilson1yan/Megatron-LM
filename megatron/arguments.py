@@ -40,6 +40,7 @@ def parse_args(extra_args_provider=None, ignore_unknown_args=False):
     parser.add_argument("--batch-size-per-rank", type=int, default=1)
     parser.add_argument("--warmup-iters", type=int, default=10)
     parser.add_argument("--trial-iters", type=int, default=100)
+    parser.add_argument("--config", type=str, required=True)
 
     # Custom arguments.
     if extra_args_provider is not None:
