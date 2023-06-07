@@ -38,6 +38,7 @@ def parse_args(extra_args_provider=None, ignore_unknown_args=False):
 
     parser.add_argument("--seq_len", type=int, default=4096)
     parser.add_argument("--batch-size-per-rank", type=int, default=1)
+    parser.add_argument("--n-microbatches", type=int, default=1)
     parser.add_argument("--warmup-iters", type=int, default=10)
     parser.add_argument("--trial-iters", type=int, default=100)
     parser.add_argument("--config", type=str, required=True)

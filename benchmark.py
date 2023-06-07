@@ -67,10 +67,14 @@ def main(args):
               f'{mpu.get_data_parallel_world_size()}')
         print(f'> initialized tensor model parallel with size '
               f'{mpu.get_tensor_model_parallel_world_size()}')
+        print(f'> initialized pipeline model parallel with size '
+              f'{mpu.get_pipeline_model_parallel_world_size()}')
 
 #    set_jit_fusion_options()
 
-    model = GPTModel()
+    pre_process = mpu.is_pipeline_first_stage()
+    post_process = mpu.is_pipeline_last_stage()
+    model = GPTModel(pre_process=pre_process, post_process=post_process)
     for param in model.parameters():
         tensor_parallel.set_defaults_if_not_set_tensor_model_parallel_attributes(param)
 
@@ -135,7 +139,7 @@ def main(args):
             forward_step_func=forward_step,
             data_iterator=batch,
             model=model,
-            num_microbatches=1,
+            num_microbatches=args.n_microbatches,
             dtype=args.params_dtype,
             tensor_shape=(args.seq_length, args.micro_batch_size, args.hidden_size),
             grad_scaler=optimizer.scale_loss,
