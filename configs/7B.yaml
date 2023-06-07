@@ -1,5 +1,5 @@
 num_layers: 32
 hidden_size: 4128
 ffn_hidden_size: 16512
-num_attention_heads: 48
-kv_channels: 86
+num_attention_heads: 24
+kv_channels: 172

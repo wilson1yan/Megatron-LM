@@ -12,7 +12,7 @@ from megatron.initialize import set_jit_fusion_options
 from megatron.arguments import parse_args
 from megatron.global_vars import set_global_variables, set_args
 from megatron.core.enums import ModelType
-from megatron.model import GPTModel
+from megatron.model import GPTModel, Float16Module
 from megatron.model import DistributedDataParallel as LocalDDP
 from megatron.optimizer import get_megatron_optimizer
 from megatron.core.pipeline_parallel import get_forward_backward_func
@@ -28,12 +28,31 @@ def init_head_parallel():
         assert world_size % n_heads == 0
         assert (n_heads * head_dim) % world_size == 0
         group_size = world_size // n_heads
+        n_groups = world_size // group_size
+        for i in range(n_groups):
+            start_rank = i * group_size
+            ranks = list(range(start_rank, start_rank + group_size))
+            group = dist.new_group(ranks)
+            if rank in ranks:
+                mpu.set_head_model_parallel_group(group)
         if rank == 0:
             print(f'> initialized head parallel with size {group_size}')
-        start_rank = rank // group_size * group_size
-        ranks = range(start_rank, start_rank + group_size)
-    group = dist.new_group(ranks)
-    mpu.set_head_model_parallel_group(group)
+
+
+def estimate_params():
+    l = args.num_layers
+    h = args.hidden_size
+    V = 2048
+    s = args.seq_len
+    return 12 * l * h ** 2 * (1 + 13 / (12 * h) + (V + s) / (12 * l * h))
+
+def estimate_flops():
+    l = args.num_layers
+    h = args.hidden_size
+    V = 2048
+    s = args.seq_len
+    B = args.batch_size_per_rank
+    return 96 * B * s * l * h ** 2 * (1 + s / (6 * h) + V / (16 * l * h))
 
 
 def main(args):
@@ -41,13 +60,13 @@ def main(args):
     torch.cuda.set_device(device)
     dist.init_process_group('nccl', world_size=size, rank=rank)
 
+    init_head_parallel()
     mpu.initialize_model_parallel(args.tensor_model_parallel_size)
     if rank == 0:
         print(f'> initialized data model parallel with size '
               f'{mpu.get_data_parallel_world_size()}')
         print(f'> initialized tensor model parallel with size '
               f'{mpu.get_tensor_model_parallel_world_size()}')
-    init_head_parallel()
 
 #    set_jit_fusion_options()
 
@@ -56,10 +75,13 @@ def main(args):
         tensor_parallel.set_defaults_if_not_set_tensor_model_parallel_attributes(param)
 
     if rank == 0:
-        print(' > number of parameters: {}'.format(
-            sum([p.nelement() for p in model.parameters()]) * mpu.get_tensor_model_parallel_world_size(), flush=True))
+        params = sum([p.nelement() for p in model.parameters()]) * mpu.get_tensor_model_parallel_world_size()
+        params = params / 1e9
+        print(f'> number of parameters: {params:.3f}B')
 
     model.cuda(torch.cuda.current_device())
+    if args.fp16:
+        model = Float16Module(model, args)
 
     if args.DDP_impl == 'torch':
         i = torch.cuda.current_device()
@@ -134,6 +156,7 @@ def main(args):
         if args.empty_unused_memory_level >= 2:
             torch.cuda.empty_cache()
 
+    torch.cuda.reset_peak_memory_stats(device=device)
     for _ in range(args.warmup_iters):
         train_step()
     torch.cuda.synchronize()
@@ -149,7 +172,13 @@ def main(args):
 
     elapsed = start.elapsed_time(end) / 1000
     if rank == 0:
-        print(f"Iters: {args.trial_iters}, Elapsed: {elapsed / args.trial_iters} s/itr")
+        time_per_itr = elapsed / args.trial_iters
+        print(f"Iters: {args.trial_iters}, Elapsed: {time_per_itr} s/itr")
+        b = torch.cuda.max_memory_allocated(device=device)
+        print(f'Peak Memory Usage: {b / 2 ** 30:.2f}GB')
+        print(f'Estimate params: {estimate_params()}')
+        tflops = estimate_flops() / 1e12 / time_per_itr
+        print(f'Estimate TFLOP/s: {tflops:.2f}, Per Device: {tflops / args.tensor_model_parallel_size:.2f}')
             
 
 if __name__ == "__main__":
@@ -171,7 +200,10 @@ if __name__ == "__main__":
     ards_d.update(**config)
 
     args.padded_vocab_size = math.ceil(2048 / args.tensor_model_parallel_size) * args.tensor_model_parallel_size
-    args.params_dtype = torch.float32
+    if args.fp16:
+        args.params_dtype = torch.half
+    else:
+        args.params_dtype = torch.float
     args.model_type = ModelType.encoder_or_decoder
     args.virtual_pipeline_model_parallel_size = None
     args.encoder_num_layers = args.num_layers

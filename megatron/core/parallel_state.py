@@ -269,6 +269,7 @@ def is_unitialized():
     
 def set_head_model_parallel_group(group):
     global _HEAD_MODEL_PARALLEL_GROUP
+    assert _HEAD_MODEL_PARALLEL_GROUP is None
     _HEAD_MODEL_PARALLEL_GROUP = group
 
 def get_head_model_parallel_group():
