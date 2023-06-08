@@ -1106,7 +1106,7 @@ def forward_backward_pipelining_without_interleaving(*,
     num_microbatches_remaining = \
         num_microbatches - num_warmup_microbatches
 
-    model_type = get_model_type(model)
+    model_type = ModelType.encoder_or_decoder #get_model_type(model)
 
     rank = parallel_state.get_pipeline_model_parallel_rank()
     recv_tensor_shapes = get_tensor_shapes(rank=rank-1,

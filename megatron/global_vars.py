@@ -32,6 +32,7 @@ def get_retro_args():
 
 
 def get_num_microbatches():
+    return 4
     return 1
     return _GLOBAL_NUM_MICROBATCHES_CALCULATOR.get()
 

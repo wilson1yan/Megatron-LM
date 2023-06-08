@@ -112,26 +112,40 @@ def _batched_p2p_ops(*,
                      tensor_send_next: Optional[torch.Tensor],
                      tensor_recv_next: Optional[torch.Tensor],
                      group: torch.distributed.ProcessGroup):
+    from megatron.core import mpu
     ops = []
+    name = None
     if tensor_send_prev is not None:
+#        if mpu.get_data_parallel_rank() == 0 and mpu.get_tensor_model_parallel_rank() == 0:
+#            name = f'send backward {mpu._PIPELINE_GLOBAL_RANKS[mpu.get_pipeline_model_parallel_rank()]} to {get_pipeline_model_parallel_prev_rank()}'
+#            print(f'send backward {tensor_send_prev.shape} {mpu._PIPELINE_GLOBAL_RANKS[mpu.get_pipeline_model_parallel_rank()]} to {get_pipeline_model_parallel_prev_rank()}', flush=True)
         send_prev_op = torch.distributed.P2POp(
             torch.distributed.isend, tensor_send_prev,
             get_pipeline_model_parallel_prev_rank(),
             group)
         ops.append(send_prev_op)
     if tensor_recv_prev is not None:
+#        if mpu.get_data_parallel_rank() == 0 and mpu.get_tensor_model_parallel_rank() == 0:
+#            name = f'recv forward {mpu._PIPELINE_GLOBAL_RANKS[mpu.get_pipeline_model_parallel_rank()]} from {get_pipeline_model_parallel_prev_rank()}'
+#            print(f'recv forward {tensor_recv_prev.shape} {mpu._PIPELINE_GLOBAL_RANKS[mpu.get_pipeline_model_parallel_rank()]} from {get_pipeline_model_parallel_prev_rank()}', flush=True)
         recv_prev_op = torch.distributed.P2POp(
             torch.distributed.irecv, tensor_recv_prev,
             get_pipeline_model_parallel_prev_rank(),
             group)
         ops.append(recv_prev_op)
     if tensor_send_next is not None:
+#        if mpu.get_data_parallel_rank() == 0 and mpu.get_tensor_model_parallel_rank() == 0:
+#            name = f'send forward {mpu._PIPELINE_GLOBAL_RANKS[mpu.get_pipeline_model_parallel_rank()]} to {get_pipeline_model_parallel_next_rank()}'
+#            print(f'send forward {tensor_send_next.shape} {mpu._PIPELINE_GLOBAL_RANKS[mpu.get_pipeline_model_parallel_rank()]} to {get_pipeline_model_parallel_next_rank()}', flush=True)
         send_next_op = torch.distributed.P2POp(
             torch.distributed.isend, tensor_send_next,
             get_pipeline_model_parallel_next_rank(),
             group)
         ops.append(send_next_op)
     if tensor_recv_next is not None:
+#        if mpu.get_data_parallel_rank() == 0 and mpu.get_tensor_model_parallel_rank() == 0:
+#            name = f'recv backward {mpu._PIPELINE_GLOBAL_RANKS[mpu.get_pipeline_model_parallel_rank()]} from {get_pipeline_model_parallel_next_rank()}'
+#            print(f'recv backward {tensor_recv_next.shape} {mpu._PIPELINE_GLOBAL_RANKS[mpu.get_pipeline_model_parallel_rank()]} from {get_pipeline_model_parallel_next_rank()}', flush=True)
         recv_next_op = torch.distributed.P2POp(
             torch.distributed.irecv, tensor_recv_next,
             get_pipeline_model_parallel_next_rank(),
@@ -141,6 +155,7 @@ def _batched_p2p_ops(*,
         reqs = torch.distributed.batch_isend_irecv(ops)
     else:
         reqs = []
+#    reqs.append(name)
     return reqs
 
 def _p2p_ops(*,
@@ -349,6 +364,8 @@ def _communicate(*, tensor_send_next: Optional[torch.Tensor],
     if wait_on_reqs and len(reqs) > 0:
         for req in reqs:
             req.wait()
+#        if reqs[-1] is not None:
+#            print('finished reqs', reqs[-1], flush=True)
         reqs = None
 
     if batch_p2p_comm and batch_p2p_sync:
