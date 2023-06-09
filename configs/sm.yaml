@@ -1,4 +1,4 @@
-num_layers: 8
+num_layers: 6
 hidden_size: 384
 ffn_hidden_size: 1536
 num_attention_heads: 6
