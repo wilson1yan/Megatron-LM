@@ -408,7 +408,7 @@ class TransformerLanguageModel(MegatronModule):
         elif self.add_encoder:
             assert len(input_tensor) == 1, \
                 'input_tensor should only be length 1 for stage with only encoder'
-            self.encoder.set_input_tensor(input_tensor[0])
+            self.nets[0].set_input_tensor(input_tensor[0])
         elif self.add_decoder:
             if len(input_tensor) == 2:
                 self.decoder.set_input_tensor(input_tensor[0])
@@ -439,7 +439,7 @@ class TransformerLanguageModel(MegatronModule):
         for model in self.nets:
             x = model(x, None)
             # TODO pool layer with custom fwd bwd allgather process
-        return x, x
+        return x
 
 
     def state_dict_for_save_checkpoint(self, prefix='', keep_vars=False):

@@ -223,7 +223,7 @@ class CoreAttention(MegatronModule):
 
         # Per attention head and per partition values.
         world_size = mpu.get_tensor_model_parallel_world_size()
-        head_world_size = mpu.get_head_model_parallel_world_size()
+        head_world_size = 1 #mpu.get_head_model_parallel_world_size()
         self.hidden_size_per_partition = core.utils.divide(
             projection_size, world_size)
         if head_world_size == 1:
@@ -446,7 +446,7 @@ class ParallelAttention(MegatronModule):
 
         # Per attention head and per partition values.
         world_size = mpu.get_tensor_model_parallel_world_size()
-        head_world_size = mpu.get_head_model_parallel_world_size()
+        head_world_size = 1
         assert head_world_size == 1
         if head_world_size == 1:
             self.hidden_size_per_attention_head = core.utils.divide(
