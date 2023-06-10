@@ -21,20 +21,61 @@ from megatron.optimizer import get_megatron_optimizer
 from megatron.core.pipeline_parallel import get_forward_backward_func
 
 
-def estimate_params():
-    l = args.num_layers
-    h = args.hidden_size
+def estimate_params_tfm(i, seq_len):
+    l = args.hier_num_layers[i]
+    h = args.hier_hidden_size[i]
     V = 2304
-    s = args.seq_len
+    s = seq_len
     return 12 * l * h ** 2 * (1 + 13 / (12 * h) + (V + s) / (12 * l * h))
 
-def estimate_flops():
-    l = args.num_layers
-    h = args.hidden_size
+def estimate_params():
+    params = 0
+    world_size = dist.get_world_size()
+
+    mp_sizes = []
+    for i in range(args.n_hier):
+        tp, pp = args.hier_tensor_model_parallel_size[i], args.hier_pipeline_model_parallel_size[i]
+        mp = tp * pp
+        mp_sizes.append(mp)
+    true_mp = max(mp_sizes)
+    true_dp = world_size // true_mp
+
+    for i in range(args.n_hier):
+        tp, pp = args.hier_tensor_model_parallel_size[i],  args.hier_pipeline_model_parallel_size[i]
+        mp = tp * pp
+        dp = world_size // mp
+        seq_len = args.seq_len // (true_mp // mp)
+        params += estimate_params_tfm(i, seq_len)
+    return params
+
+
+def estimate_flops_tfm(i, seq_len, batch):
+    l = args.hier_num_layers[i]
+    h = args.hier_hidden_size[i]
     V = 2304
-    s = args.seq_len
-    B = args.batch_size_per_rank
-    return 96 * B * s * l * h ** 2 * (1 + s / (6 * h) + V / (16 * l * h)) * mpu.get_data_parallel_world_size()
+    s = seq_len
+    B = batch
+    return 96 * B * s * l * h ** 2 * (1 + s / (6 * h) + V / (16 * l * h))
+
+def estimate_flops():
+    flops = 0
+    world_size = dist.get_world_size()
+
+    mp_sizes = []
+    for i in range(args.n_hier):
+        tp, pp = args.hier_tensor_model_parallel_size[i], args.hier_pipeline_model_parallel_size[i]
+        mp = tp * pp
+        mp_sizes.append(mp)
+    true_mp = max(mp_sizes)
+    true_dp = world_size // true_mp
+
+    for i in range(args.n_hier):
+        tp, pp = args.hier_tensor_model_parallel_size[i],  args.hier_pipeline_model_parallel_size[i]
+        mp = tp * pp
+        dp = world_size // mp
+        seq_len = args.seq_len // (true_mp // mp)
+        flops += estimate_flops_tfm(i, seq_len, true_dp * (true_mp // mp))
+    return flops
 
 
 def main(args):
@@ -78,7 +119,7 @@ def main(args):
     model = []
     for i in range(n_hier):
         pre_process = mpu.is_pipeline_first_stage() and i == 0
-        post_process = mpu.is_pipeline_last_stage() and i == args.n_hiers - 1
+        post_process = mpu.is_pipeline_last_stage() and i == args.n_hier - 1
         m = GPTModel(pre_process=pre_process, post_process=post_process)
         model.append(m)
 
