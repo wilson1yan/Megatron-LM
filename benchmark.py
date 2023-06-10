@@ -74,7 +74,7 @@ def estimate_flops():
         mp = tp * pp
         dp = world_size // mp
         seq_len = args.seq_len // (true_mp // mp)
-        flops += estimate_flops_tfm(i, seq_len, true_dp * (true_mp // mp))
+        flops += estimate_flops_tfm(i, seq_len, true_dp * (true_mp // mp) * args.batch_size_per_rank)
     return flops
 
 
