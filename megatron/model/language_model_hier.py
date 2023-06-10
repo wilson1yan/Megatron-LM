@@ -327,7 +327,6 @@ class TransformerLanguageModel(MegatronModule):
     """
 
     def __init__(self,
-                 id,
                  init_method,
                  output_layer_init_method,
                  encoder_attn_mask_type,
@@ -339,14 +338,13 @@ class TransformerLanguageModel(MegatronModule):
                  pre_process=True,
                  post_process=True):
         args = get_args()
-        self.id = id
         # TODO: passing share_word_embeddings=False will not work correctly for T5 and embeddings will not be synced. Fix later for T5.
         if args.untie_embeddings_and_output_weights: assert not add_decoder
         super(TransformerLanguageModel, self).__init__(share_word_embeddings=not args.untie_embeddings_and_output_weights)
 
         self.pre_process = pre_process
         self.post_process = post_process
-        self.hidden_size = args.hidden_size
+        self.hidden_size = args.hier_hidden_size[mpu.get_current_id()]
         self.num_tokentypes = num_tokentypes
         self.init_method = init_method
         self.add_encoder = add_encoder
@@ -371,7 +369,6 @@ class TransformerLanguageModel(MegatronModule):
         # architecture and in encoder-only stage).
 
         self.model = ParallelTransformer(
-            self.id,
             self.init_method,
             output_layer_init_method,
             model_type=args.model_type if not args.retro_add_retriever \
@@ -384,7 +381,7 @@ class TransformerLanguageModel(MegatronModule):
         if self.post_process:
             if self.untie_embeddings_and_output_weights:
                 self.output_layer = tensor_parallel.ColumnParallelLinear(
-                    args.hidden_size,
+                    self.hidden_size,
                     args.padded_vocab_size,
                     bias=False, # Setting bias to False always to keep it consistent with embedding tying that also does not have a bias.
                     init_method=self.init_method,
@@ -407,7 +404,7 @@ class TransformerLanguageModel(MegatronModule):
         elif self.add_encoder:
             assert len(input_tensor) == 1, \
                 'input_tensor should only be length 1 for stage with only encoder'
-            self.nets[0].set_input_tensor(input_tensor[0])
+            self.model.set_input_tensor(input_tensor[0])
         elif self.add_decoder:
             if len(input_tensor) == 2:
                 self.decoder.set_input_tensor(input_tensor[0])

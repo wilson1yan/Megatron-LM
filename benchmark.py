@@ -24,14 +24,14 @@ from megatron.core.pipeline_parallel import get_forward_backward_func
 def estimate_params():
     l = args.num_layers
     h = args.hidden_size
-    V = 2048
+    V = 2304
     s = args.seq_len
     return 12 * l * h ** 2 * (1 + 13 / (12 * h) + (V + s) / (12 * l * h))
 
 def estimate_flops():
     l = args.num_layers
     h = args.hidden_size
-    V = 2048
+    V = 2304
     s = args.seq_len
     B = args.batch_size_per_rank
     return 96 * B * s * l * h ** 2 * (1 + s / (6 * h) + V / (16 * l * h)) * mpu.get_data_parallel_world_size()
@@ -42,19 +42,28 @@ def main(args):
     torch.cuda.set_device(device)
     dist.init_process_group('nccl', world_size=size, rank=rank)
 
-    mpu.initialize_model_parallel(args.tensor_model_parallel_size, args.pipeline_model_parallel_size)
+    n_hier = args.n_hier
+    mpu.set_n_hier(n_hier)
+    for i in range(n_hier):
+        mpu.initialize_model_parallel(args.hier_tensor_model_parallel_size[i], args.hier_pipeline_model_parallel_size[i], id=i)
+
     if rank == 0:
-        print(f'> initialized data model parallel with size '
-              f'{mpu.get_data_parallel_world_size()}')
-        print(f'> initialized tensor model parallel with size '
-              f'{mpu.get_tensor_model_parallel_world_size()}')
-        print(f'> initialized pipeline model parallel with size '
-              f'{mpu.get_pipeline_model_parallel_world_size()}')
+        for i in range(n_hier):
+            print(f'HIER {i}')
+            mpu.set_current_id(i)
+            print(f'> initialized data model parallel with size '
+                  f'{mpu.get_data_parallel_world_size()}')
+            print(f'> initialized tensor model parallel with size '
+                  f'{mpu.get_tensor_model_parallel_world_size()}')
+            print(f'> initialized pipeline model parallel with size '
+                  f'{mpu.get_pipeline_model_parallel_world_size()}')
+
+    mpu.set_current_id(0)
 
 #    set_jit_fusion_options()
 
     model = []
-    for i in range(args.n_hiers):
+    for i in range(n_hier):
         pre_process = mpu.is_pipeline_first_stage() and i == 0
         post_process = mpu.is_pipeline_last_stage() and i == args.n_hiers - 1
         m = GPTModel(pre_process=pre_process, post_process=post_process)
@@ -198,14 +207,14 @@ if __name__ == "__main__":
     ards_d = vars(args)
     ards_d.update(**config)
 
-    args.padded_vocab_size = math.ceil(2048 / args.tensor_model_parallel_size) * args.tensor_model_parallel_size
+    args.padded_vocab_size = math.ceil(2304 / args.tensor_model_parallel_size) * args.tensor_model_parallel_size
     if args.fp16:
         args.params_dtype = torch.half
     else:
         args.params_dtype = torch.float
     args.model_type = ModelType.encoder_or_decoder
-    args.encoder_num_layers = args.num_layers
-    args.transformer_pipeline_model_parallel_size = args.pipeline_model_parallel_size
+    #args.encoder_num_layers = args.num_layers
+    #args.transformer_pipeline_model_parallel_size = args.pipeline_model_parallel_size
     args.virtual_pipeline_model_parallel_size = None
     set_args(args)
 

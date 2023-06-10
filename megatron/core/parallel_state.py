@@ -8,7 +8,7 @@ from typing import Optional
 from .utils import GlobalMemoryBuffer
 
 _CURRENT_ID = 0
-_N_HIER
+_N_HIER = None
 
 # Intra-layer model parallel group that the current rank belongs to.
 _TENSOR_MODEL_PARALLEL_GROUP = {}
@@ -231,7 +231,8 @@ def initialize_model_parallel(
     # This isn't really "parallel state" but there isn't another good place to
     # put this. If we end up with a more generic initialization of megatron-core
     # we could stick it there
-    _set_global_memory_buffer()
+    if _GLOBAL_MEMORY_BUFFER is None:
+        _set_global_memory_buffer()
 
     
 def get_current_id():
@@ -245,7 +246,8 @@ def set_n_hier(n):
     global _N_HIER
     _N_HIER = n
 
-def get_n_heir():
+def get_n_hier():
+    assert _N_HIER is not None
     return _N_HIER
 
 def model_parallel_is_initialized():

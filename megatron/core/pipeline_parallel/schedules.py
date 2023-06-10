@@ -387,14 +387,13 @@ def forward_backward_no_pipelining(*,
                 else:
                     raise Exception(s)
                 
-                if j < parallel_state.get_n_heir() - 1:
+                if j < parallel_state.get_n_hier() - 1:
                     parallel_state.set_current_id(j + 1)
-                print(input_tensor.shape) 
                 
                     
             output_tensor = input_tensor
             if not forward_only:
-                backward_step(grad_scaler, input_tensor, output_tensor,
+                backward_step(grad_scaler, None, output_tensor,
                               output_tensor_grad, model_type, timers, deallocate_pipeline_outputs)
 
     parallel_state.set_current_id(0)
@@ -415,10 +414,12 @@ def forward_backward_no_pipelining(*,
             input_tensor = input_tensor.repeat_interleave(s, axis=0)
         else:
             raise Exception(s)
+        if j < parallel_state.get_n_hier() - 1:
+            parallel_state.set_current_id(j + 1)
     output_tensor = input_tensor
 
     if not forward_only:
-        backward_step(grad_scaler, input_tensor, output_tensor,
+        backward_step(grad_scaler, None, output_tensor,
                       output_tensor_grad, model_type, timers, deallocate_pipeline_outputs)
     parallel_state.set_current_id(0)
     return forward_data_store

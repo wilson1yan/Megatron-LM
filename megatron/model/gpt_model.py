@@ -5,7 +5,7 @@
 import torch
 
 from megatron import get_args
-from megatron.core import tensor_parallel
+from megatron.core import tensor_parallel, mpu
 from .module import MegatronModule
 
 from .enums import AttnMaskType
@@ -59,13 +59,14 @@ class GPTModel(MegatronModule):
         self.fp16_lm_cross_entropy = args.fp16_lm_cross_entropy
         self.untie_embeddings_and_output_weights = args.untie_embeddings_and_output_weights
 
+        num_layers = args.hier_num_layers[mpu.get_current_id()]
         self.language_model, self._language_model_key = get_language_model(
             num_tokentypes=num_tokentypes,
             add_pooler=False,
             encoder_attn_mask_type=AttnMaskType.causal,
             init_method=init_method_normal(args.init_method_std),
             scaled_init_method=scaled_init_method_normal(args.init_method_std,
-                                                         args.num_layers),
+                                                         num_layers),
             pre_process=self.pre_process,
             post_process=self.post_process)
         

@@ -1258,7 +1258,7 @@ def _get_num_layers(args, model_type, is_decoder=False):
                 args.num_layers // args.transformer_pipeline_model_parallel_size
             )
     else:
-        num_layers = args.hier_layers[mpu.get_current_id()]
+        num_layers = args.hier_num_layers[mpu.get_current_id()]
         # if not is_decoder:
         #     num_layers = args.encoder_num_layers
         # else:
@@ -1285,7 +1285,7 @@ def _get_layer_type(model_type, default_layer_type, retro_layer_numbers,
 class ParallelTransformer(MegatronModule):
     """Transformer class."""
 
-    def __init__(self, id, init_method, output_layer_init_method,
+    def __init__(self, init_method, output_layer_init_method,
                  model_type, layer_type=LayerType.encoder,
                  self_attn_mask_type=AttnMaskType.padding,
                  post_layer_norm=True,
@@ -1293,7 +1293,6 @@ class ParallelTransformer(MegatronModule):
                  post_process=True,
                  drop_path_rate=0.0):
         super(ParallelTransformer, self).__init__()
-        self.id = id
         args = get_args()
 
         self.layer_type = layer_type
@@ -1359,7 +1358,7 @@ class ParallelTransformer(MegatronModule):
 
         self.drop_path_rates = [
             rate.item() for rate in
-            torch.linspace(0, self.drop_path_rate, args.hier_layers[mpu.get_current_id()])]
+            torch.linspace(0, self.drop_path_rate, args.hier_num_layers[mpu.get_current_id()])]
 
         self.retro_layer_numbers = None
         if model_type == ModelType.retro_decoder:
