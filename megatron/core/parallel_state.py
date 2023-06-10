@@ -8,6 +8,7 @@ from typing import Optional
 from .utils import GlobalMemoryBuffer
 
 _CURRENT_ID = 0
+_N_HIER
 
 # Intra-layer model parallel group that the current rank belongs to.
 _TENSOR_MODEL_PARALLEL_GROUP = {}
@@ -240,7 +241,12 @@ def set_current_id(id):
     global _CURRENT_ID
     _CURRENT_ID = id
 
+def set_n_hier(n):
+    global _N_HIER
+    _N_HIER = n
 
+def get_n_heir():
+    return _N_HIER
 
 def model_parallel_is_initialized():
     """Check if model and data parallel groups are initialized."""
@@ -385,7 +391,7 @@ def is_pipeline_first_stage(ignore_virtual=False):
     #     if get_virtual_pipeline_model_parallel_world_size() is not None and \
     #         get_virtual_pipeline_model_parallel_rank() != 0:
     #         return False
-    return get_pipeline_model_parallel_rank() == 0
+    return get_pipeline_model_parallel_rank() == 0 and _CURRENT_ID == 0
 
 
 def is_pipeline_last_stage(ignore_virtual=False):
@@ -398,7 +404,7 @@ def is_pipeline_last_stage(ignore_virtual=False):
     #             virtual_pipeline_model_parallel_world_size - 1):
     #         return False
     return get_pipeline_model_parallel_rank() == (
-        get_pipeline_model_parallel_world_size() - 1)
+        get_pipeline_model_parallel_world_size() - 1) and _CURRENT_ID == _N_HIER - 1
 
 
 def is_rank_in_embedding_group(ignore_virtual=False):

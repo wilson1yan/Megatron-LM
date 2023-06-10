@@ -53,10 +53,12 @@ def main(args):
 
 #    set_jit_fusion_options()
 
-    pre_process = mpu.is_pipeline_first_stage()
-    post_process = mpu.is_pipeline_last_stage()
-    model = GPTModel(pre_process=pre_process, post_process=post_process)
-    model = [model]
+    model = []
+    for i in range(args.n_hiers):
+        pre_process = mpu.is_pipeline_first_stage() and i == 0
+        post_process = mpu.is_pipeline_last_stage() and i == args.n_hiers - 1
+        m = GPTModel(pre_process=pre_process, post_process=post_process)
+        model.append(m)
 
     for m in model:
         for param in m.parameters():

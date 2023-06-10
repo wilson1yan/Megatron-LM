@@ -7,6 +7,7 @@ import torch.nn.functional as F
 
 from megatron import get_args
 from megatron.core import mpu, tensor_parallel
+from megatron.core.tensor_parallel.mappings import _ScatterToSequenceParallelRegion, _GatherFromSequenceParallelRegion
 from megatron.core.enums import ModelType
 
 from .enums import AttnMaskType, LayerType
@@ -326,6 +327,7 @@ class TransformerLanguageModel(MegatronModule):
     """
 
     def __init__(self,
+                 id,
                  init_method,
                  output_layer_init_method,
                  encoder_attn_mask_type,
@@ -337,6 +339,7 @@ class TransformerLanguageModel(MegatronModule):
                  pre_process=True,
                  post_process=True):
         args = get_args()
+        self.id = id
         # TODO: passing share_word_embeddings=False will not work correctly for T5 and embeddings will not be synced. Fix later for T5.
         if args.untie_embeddings_and_output_weights: assert not add_decoder
         super(TransformerLanguageModel, self).__init__(share_word_embeddings=not args.untie_embeddings_and_output_weights)
@@ -367,20 +370,16 @@ class TransformerLanguageModel(MegatronModule):
         # Encoder (usually set to True, False if part of an encoder-decoder
         # architecture and in encoder-only stage).
 
-        self.nets = torch.nn.ModuleList()
-        for i in range(args.n_hier):
-            # TODO pre / post process args
-            model = ParallelTransformer(
-                i,
-                self.init_method,
-                output_layer_init_method,
-                model_type=args.model_type if not args.retro_add_retriever \
-                    else ModelType.retro_decoder,
-                self_attn_mask_type=self.encoder_attn_mask_type,
-                pre_process=self.pre_process,
-                post_process=self.post_process,
-            )
-            self.nets.append(model)
+        self.model = ParallelTransformer(
+            self.id,
+            self.init_method,
+            output_layer_init_method,
+            model_type=args.model_type if not args.retro_add_retriever \
+                else ModelType.retro_decoder,
+            self_attn_mask_type=self.encoder_attn_mask_type,
+            pre_process=self.pre_process,
+            post_process=self.post_process,
+        )
 
         if self.post_process:
             if self.untie_embeddings_and_output_weights:
@@ -436,9 +435,7 @@ class TransformerLanguageModel(MegatronModule):
         rotary_pos_emb = None
 
         x = encoder_input
-        for model in self.nets:
-            x = model(x, None)
-            # TODO pool layer with custom fwd bwd allgather process
+        x = self.model(x, None)
         return x
 
 

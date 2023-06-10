@@ -7,6 +7,7 @@ import torch
 from torch.autograd.variable import Variable
 from torch.nn.parallel.distributed import DistributedDataParallel as torchDDP
 
+from megatron import get_args
 from megatron.core import parallel_state
 from megatron.core.pipeline_parallel import p2p_communication
 from megatron.core.enums import ModelType
@@ -348,10 +349,10 @@ def forward_backward_no_pipelining(*,
     See get_forward_backward_func() for argument details
     """
 
-    if isinstance(model, list):
-        assert len(model) == 1, \
-            "non-pipeline-parallel schedule does not support model chunking"
-        model = model[0]
+    # if isinstance(model, list):
+    #     assert len(model) == 1, \
+    #         "non-pipeline-parallel schedule does not support model chunking"
+    #     model = model[0]
     if isinstance(data_iterator, list):
         assert len(data_iterator) == 1, \
             "non-pipeline-parallel schedule does not support model chunking"
@@ -364,27 +365,62 @@ def forward_backward_no_pipelining(*,
 
     model_type = ModelType.encoder_or_decoder #get_model_type(model)
 
+    args = get_args()
     forward_data_store = []
     input_tensor, output_tensor_grad = None, None
     with no_sync_func():
         for i in range(num_microbatches - 1):
-            output_tensor = forward_step(forward_step_func, data_iterator,
-                                         model, num_microbatches, input_tensor, forward_data_store,
-                                         timers, collect_non_loss_data, dtype, enable_autocast)
+            parallel_state.set_current_id(0)
+            input_tensor = None
+            for j in range(parallel_state.get_n_hier()):
+                input_tensor = forward_step(forward_step_func, data_iterator,
+                                            model[j], num_microbatches, input_tensor, forward_data_store,
+                                            timers, collect_non_loss_data, dtype, enable_autocast)
+                s = args.hier_strides[j]
+                if s[0] == "d":
+                    s = int(s[1:])
+                    input_tensor = input_tensor.view(-1, s, *input_tensor.shape[1:])
+                    input_tensor = input_tensor.mean(axis=1)
+                elif s[0] == "u":
+                    s = int(s[1:])
+                    input_tensor = input_tensor.repeat_interleave(s, axis=0)
+                else:
+                    raise Exception(s)
+                
+                if j < parallel_state.get_n_heir() - 1:
+                    parallel_state.set_current_id(j + 1)
+                print(input_tensor.shape) 
+                
+                    
+            output_tensor = input_tensor
             if not forward_only:
                 backward_step(grad_scaler, input_tensor, output_tensor,
                               output_tensor_grad, model_type, timers, deallocate_pipeline_outputs)
 
+    parallel_state.set_current_id(0)
     # Run computation for last microbatch out of context handler (want to
     # synchronize gradients).
-    output_tensor = forward_step(forward_step_func, data_iterator,
-                                 model, num_microbatches, input_tensor, forward_data_store,
-                                 timers, collect_non_loss_data, dtype, enable_autocast)
+    input_tensor = None
+    for j in range(parallel_state.get_n_hier()):
+        input_tensor = forward_step(forward_step_func, data_iterator,
+                                    model, num_microbatches, input_tensor, forward_data_store,
+                                    timers, collect_non_loss_data, dtype, enable_autocast)
+        s = args.hier_strides[j]
+        if s[0] == "d":
+            s = int(s[1:])
+            input_tensor = input_tensor.view(-1, s, *input_tensor.shape[1:])
+            input_tensor = input_tensor.mean(axis=1)
+        elif s[0] == "u":
+            s = int(s[1:])
+            input_tensor = input_tensor.repeat_interleave(s, axis=0)
+        else:
+            raise Exception(s)
+    output_tensor = input_tensor
 
     if not forward_only:
         backward_step(grad_scaler, input_tensor, output_tensor,
                       output_tensor_grad, model_type, timers, deallocate_pipeline_outputs)
-
+    parallel_state.set_current_id(0)
     return forward_data_store
 
 

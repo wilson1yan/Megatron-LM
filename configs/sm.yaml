@@ -1,6 +1,7 @@
-n_hier: 1
-num_layers: 6
-hidden_size: 768
-ffn_hidden_size: 3072
-num_attention_heads: 12
-kv_channels: 64
+n_hier: 2
+hier_strides: ["d1", "d1"]
+hier_num_layers: [6, 6]
+hidden_size: [384, 384]
+ffn_hidden_size: [1536, 1536]
+hier_num_attention_heads: [6, 6]
+# kv_channels: 64
