@@ -318,6 +318,42 @@ def backward_step(grad_scaler, input_tensor, output_tensor,
 
     return input_tensor_grad
 
+    
+class SwitchHier(torch.autograd.Function):
+    @staticmethod
+    def foward(ctx, input_):
+        args = get_args()
+        if parallel_state.get_current_id() >= parallel_state.get_n_hier() - 1:
+            return input_
+    
+        cur_mp = args.hier_tensor_model_parallel_size[parallel_state.get_current_id()] * args.hier_pipeline_model_parallel_size[parallel_state.get_current_id()]
+        next_mp = args.hier_tensor_model_parallel_size[parallel_state.get_current_id() + 1] * args.hier_pipeline_model_parallel_size[parallel_state.get_current_id() + 1]
+        if cur_mp <= next_mp:
+            assert next_mp % cur_mp == 0
+            input_ = torch.cat([input_] * (next_mp // cur_mp), dim=0)
+        else:
+            assert cur_mp % next_mp == 0
+            input_ = torch.chunk(input_, cur_mp // next_mp, dim=0)[0]
+        parallel_state.set_current_id(parallel_state.get_current_id() + 1)
+        return input_
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        args = get_args()
+        if parallel_state.get_current_id() <= 0:
+            return grad_output
+        
+        cur_mp = args.hier_tensor_model_parallel_size[parallel_state.get_current_id()] * args.hier_pipeline_model_parallel_size[parallel_state.get_current_id()]
+        next_mp = args.hier_tensor_model_parallel_size[parallel_state.get_current_id() - 1] * args.hier_pipeline_model_parallel_size[parallel_state.get_current_id() - 1]
+        if cur_mp <= next_mp:
+            assert next_mp % cur_mp == 0
+            grad_output = torch.cat([grad_output] * (next_mp // cur_mp), dim=0)
+        else:
+            assert cur_mp % next_mp == 0
+            grad_output = torch.chunk(grad_output, cur_mp // next_mp, dim=0)[0]
+        parallel_state.set_current_id(parallel_state.get_current_id() - 1)
+        return grad_output
+
 
 def forward_backward_no_pipelining(*,
                                    forward_step_func,
@@ -387,9 +423,7 @@ def forward_backward_no_pipelining(*,
                 else:
                     raise Exception(s)
                 
-                if j < parallel_state.get_n_hier() - 1:
-                    parallel_state.set_current_id(j + 1)
-                
+                input_tensor = SwitchHier.apply(input_tensor)
                     
             output_tensor = input_tensor
             if not forward_only:
@@ -414,8 +448,7 @@ def forward_backward_no_pipelining(*,
             input_tensor = input_tensor.repeat_interleave(s, axis=0)
         else:
             raise Exception(s)
-        if j < parallel_state.get_n_hier() - 1:
-            parallel_state.set_current_id(j + 1)
+        input_tensor = SwitchHier.apply(input_tensor)
     output_tensor = input_tensor
 
     if not forward_only:

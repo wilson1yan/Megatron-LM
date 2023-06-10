@@ -53,6 +53,13 @@ _DATA_PARALLEL_GLOBAL_RANKS = {}
 # Memory buffers to avoid dynamic memory allocation
 _GLOBAL_MEMORY_BUFFER = None
 
+# def initialize_parent_hier_groups(cur_mp, next_mp, id):
+#     assert torch.distributed.is_initialized()
+#     world_size: int = torch.distributed.get_world_size()
+
+    
+    
+
 
 def initialize_model_parallel(
     tensor_model_parallel_size: int = 1,
@@ -249,6 +256,7 @@ def set_n_hier(n):
 def get_n_hier():
     assert _N_HIER is not None
     return _N_HIER
+
 
 def model_parallel_is_initialized():
     """Check if model and data parallel groups are initialized."""

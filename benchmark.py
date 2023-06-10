@@ -44,8 +44,21 @@ def main(args):
 
     n_hier = args.n_hier
     mpu.set_n_hier(n_hier)
+    largest_mp = -1
     for i in range(n_hier):
+        mp = args.hier_tensor_model_parallel_size[i] * args.hier_pipeline_model_parallel_size[i]
+        largest_mp = max(largest_mp, mp)
         mpu.initialize_model_parallel(args.hier_tensor_model_parallel_size[i], args.hier_pipeline_model_parallel_size[i], id=i)
+    
+    for i in range(n_hier):
+        mp = args.hier_tensor_model_parallel_size[i] * args.hier_pipeline_model_parallel_size[i]
+        assert largest_mp % mp == 0, (largest_mp, mp)
+
+
+    mp0 = args.hier_tensor_model_parallel_size[0] * args.hier_pipeline_model_parallel_size[0]
+    assert largest_mp % mp0 == 0
+    n_chunks = largest_mp // mp0
+        
 
     if rank == 0:
         for i in range(n_hier):
@@ -110,10 +123,10 @@ def main(args):
         assert args.batch_size_per_rank % args.n_microbatches == 0
         b = args.batch_size_per_rank // args.n_microbatches
         batch = dict(
-            tokens=torch.randint(0, 1024, (b, args.seq_len), dtype=torch.long),
-            position_ids=torch.arange(args.seq_len, dtype=torch.long),
+            tokens=torch.randint(0, 1024, (b, args.seq_len // n_chunks), dtype=torch.long),
+            position_ids=torch.arange(args.seq_len // n_chunks, dtype=torch.long),
             attention_mask=None,
-            labels=torch.randint(0, 1024, (b, args.seq_len), dtype=torch.long) 
+            labels=torch.randint(0, 1024, (b, args.seq_len // n_chunks), dtype=torch.long) 
         )
         batch = {k: v.to(device) if v is not None else None for k, v in batch.items()}
         return batch
@@ -143,7 +156,7 @@ def main(args):
             model=model,
             num_microbatches=args.n_microbatches,
             dtype=args.params_dtype,
-            tensor_shape=(args.seq_len, args.batch_size_per_rank // args.n_microbatches, args.hidden_size),
+            tensor_shape=(args.seq_len // n_chunks, args.batch_size_per_rank // args.n_microbatches, args.hidden_size),
             grad_scaler=optimizer.scale_loss,
             sequence_parallel=args.sequence_parallel,
             overlap_p2p_comm=args.overlap_p2p_comm,
