@@ -9,8 +9,8 @@ from megatron.core import tensor_parallel
 from .module import MegatronModule
 
 from .enums import AttnMaskType
-from .language_model import parallel_lm_logits
-from .language_model import get_language_model
+from .language_model_hier import parallel_lm_logits
+from .language_model_hier import get_language_model
 from .utils import init_method_normal
 from .utils import scaled_init_method_normal
 
@@ -86,10 +86,7 @@ class GPTModel(MegatronModule):
             input_ids,
             position_ids,
             attention_mask,
-            retriever_input_ids=retriever_input_ids,
-            retriever_position_ids=retriever_position_ids,
-            retriever_attn_mask=retriever_attn_mask,
-            inference_params=inference_params)
+            )
 
         if self.post_process:
             return post_language_model_processing(

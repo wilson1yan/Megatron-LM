@@ -1267,7 +1267,7 @@ def _get_layer_type(model_type, default_layer_type, retro_layer_numbers,
 class ParallelTransformer(MegatronModule):
     """Transformer class."""
 
-    def __init__(self, init_method, output_layer_init_method,
+    def __init__(self, id, init_method, output_layer_init_method,
                  model_type, layer_type=LayerType.encoder,
                  self_attn_mask_type=AttnMaskType.padding,
                  post_layer_norm=True,
@@ -1275,6 +1275,7 @@ class ParallelTransformer(MegatronModule):
                  post_process=True,
                  drop_path_rate=0.0):
         super(ParallelTransformer, self).__init__()
+        self.id = id
         args = get_args()
 
         self.layer_type = layer_type

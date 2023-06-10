@@ -21,29 +21,6 @@ from megatron.optimizer import get_megatron_optimizer
 from megatron.core.pipeline_parallel import get_forward_backward_func
 
 
-def init_head_parallel():
-    world_size = dist.get_world_size()
-    rank = dist.get_rank()
-    n_heads, head_dim = args.num_attention_heads, args.kv_channels
-    if n_heads >= args.tensor_model_parallel_size:
-        group_size = 1
-        n_groups = world_size
-    else:
-        assert False
-        assert world_size % n_heads == 0
-        assert (n_heads * head_dim) % world_size == 0
-        group_size = world_size // n_heads
-        n_groups = world_size // group_size
-    for i in range(n_groups):
-        start_rank = i * group_size
-        ranks = list(range(start_rank, start_rank + group_size))
-        group = dist.new_group(ranks)
-        if rank in ranks:
-            mpu.set_head_model_parallel_group(group)
-    if rank == 0:
-        print(f'> initialized head parallel with size {group_size}')
-
-
 def estimate_params():
     l = args.num_layers
     h = args.hidden_size
@@ -65,8 +42,7 @@ def main(args):
     torch.cuda.set_device(device)
     dist.init_process_group('nccl', world_size=size, rank=rank)
 
-    init_head_parallel()
-    mpu.initialize_model_parallel(args.tensor_model_parallel_size, args.pipeline_model_parallel_size, args.virtual_pipeline_model_parallel_size)
+    mpu.initialize_model_parallel(args.tensor_model_parallel_size, args.pipeline_model_parallel_size)
     if rank == 0:
         print(f'> initialized data model parallel with size '
               f'{mpu.get_data_parallel_world_size()}')
@@ -77,23 +53,10 @@ def main(args):
 
 #    set_jit_fusion_options()
 
-    if mpu.get_pipeline_model_parallel_world_size() > 1 and args.virtual_pipeline_model_parallel_size is not None:
-        model = []
-        for i in range(args.virtual_pipeline_model_parallel_size):
-            mpu.set_virtual_pipelien_model_parallel_rank(i)
-            pre_process = mpu.is_pipeline_first_stage()
-            post_process = mpu.is_pipeline_last_stage()
-            this_model = model_provider_func(
-                pre_process=pre_process,
-                post_process=post_process
-            )
-            this_model.model_type = ModelType.encoder_or_decoder
-            model.append(this_model)
-    else:
-        pre_process = mpu.is_pipeline_first_stage()
-        post_process = mpu.is_pipeline_last_stage()
-        model = GPTModel(pre_process=pre_process, post_process=post_process)
-        model = [model]
+    pre_process = mpu.is_pipeline_first_stage()
+    post_process = mpu.is_pipeline_last_stage()
+    model = GPTModel(pre_process=pre_process, post_process=post_process)
+    model = [model]
 
     for m in model:
         for param in m.parameters():
@@ -120,9 +83,9 @@ def main(args):
                             args.accumulate_allreduce_grads_in_fp32,
                             args.use_contiguous_buffers_in_local_ddp) for m in model]
         # broad cast params from data parallel src rank to other data parallel ranks
-        if args.data_parallel_random_init:
-            for m in model:
-                m.broadcast_params()
+        # if args.data_parallel_random_init:
+        #     for m in model:
+        #         m.broadcast_params()
     else:
         raise NotImplementedError('Unknown DDP implementation specified: '
                                     '{}. Exiting.'.format(args.DDP_impl))
