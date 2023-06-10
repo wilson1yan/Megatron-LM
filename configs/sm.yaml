@@ -1,6 +1,6 @@
 n_hier: 1
-num_layers: 1
-hidden_size: 4096
-ffn_hidden_size: 16384
-num_attention_heads: 1
-kv_channels: 4096
+num_layers: 6
+hidden_size: 768
+ffn_hidden_size: 3072
+num_attention_heads: 12
+kv_channels: 64

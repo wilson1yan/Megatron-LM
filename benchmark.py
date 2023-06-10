@@ -202,11 +202,9 @@ if __name__ == "__main__":
     else:
         args.params_dtype = torch.float
     args.model_type = ModelType.encoder_or_decoder
-    args.virtual_pipeline_model_parallel_size = None
     args.encoder_num_layers = args.num_layers
     args.transformer_pipeline_model_parallel_size = args.pipeline_model_parallel_size
-    if args.num_layers_per_virtual_pipeline_stage is not None:
-        args.virtual_pipeline_model_parallel_size = args.num_layers // args.transformer_pipeline_model_parallel_size // args.num_layers_per_virtual_pipeline_stage
+    args.virtual_pipeline_model_parallel_size = None
     set_args(args)
 
     #try:

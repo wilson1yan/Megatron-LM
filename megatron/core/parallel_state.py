@@ -25,8 +25,8 @@ _DATA_PARALLEL_GROUP_GLOO = {}
 # FP8 amax reduction group.
 _AMAX_REDUCTION_GROUP = None
 
-_VIRTUAL_PIPELINE_MODEL_PARALLEL_RANK = {}
-_VIRTUAL_PIPELINE_MODEL_PARALLEL_WORLD_SIZE = {}
+_VIRTUAL_PIPELINE_MODEL_PARALLEL_RANK = None
+_VIRTUAL_PIPELINE_MODEL_PARALLEL_WORLD_SIZE = None
 _PIPELINE_MODEL_PARALLEL_SPLIT_RANK = {}
 
 # These values enable us to change the mpu sizes on the fly.
@@ -431,6 +431,7 @@ def is_pipeline_stage_before_split(rank=None):
         return True
     if rank is None:
         rank = get_pipeline_model_parallel_rank()
+    return True
     global _PIPELINE_MODEL_PARALLEL_SPLIT_RANK
     if _PIPELINE_MODEL_PARALLEL_SPLIT_RANK is None:
         return True
@@ -446,6 +447,7 @@ def is_pipeline_stage_after_split(rank=None):
         return True
     if rank is None:
         rank = get_pipeline_model_parallel_rank()
+    return True
     global _PIPELINE_MODEL_PARALLEL_SPLIT_RANK
     if _PIPELINE_MODEL_PARALLEL_SPLIT_RANK is None:
         return True
