@@ -11,7 +11,8 @@ import torch
 import torch.distributed as dist
 
 from fairscale.nn.data_parallel import FullyShardedDataParallel as FSDP
-from fairscale.nn.wrap import wrap, enable_wrap, auto_wrap
+from fairscale.nn.checkpoint import checkpoint_wrapper
+from fairscale.nn.wrap import wrap, enable_wrap, auto_wrap, default_auto_wrap_policy
 
 
 def estimate_params():
@@ -60,14 +61,18 @@ class Transformer(torch.nn.Module):
         self.blocks = torch.nn.ModuleList()
         for _ in range(num_layers):
             self.blocks.append(TransformerDecoderLayer(d_model, nhead))
-        self.norm = torch.nn.LayerNorm()
+        self.norm = torch.nn.LayerNorm(d_model)
         self.fc_out = torch.nn.Linear(d_model, 1024)
     
     def forward(self, x):
+        x = x.t()
         x = self.embed_in(x)
         for block in self.blocks:
+            x = checkpoint_wrapper(block)(x)
             x = block(x)
-        return self.fc_out(self.norm(x))
+        x = self.fc_out(self.norm(x))
+        x = x.permute(1, 2, 0) # LND -> NDL)
+        return x
 
 
 def main(args):
@@ -75,15 +80,21 @@ def main(args):
     torch.cuda.set_device(device)
     dist.init_process_group('nccl', world_size=size, rank=rank)
 
-    fsdp_params = dict(wrapper_cls=FSDP, mixed_precision=True, flatten_parameters=True)    
+    fsdp_params = dict(flatten_parameters=True, compute_dtype=torch.float16, reshard_after_forward=True) 
     model = Transformer(
         d_model=args.hidden_size, 
         nhead=args.num_attention_heads,
         num_layers=args.num_layers
     )
-    model = FSDP(model, **fsdp_params)
+    model = model.half()
+    with enable_wrap(wrapper_cls=FSDP, **fsdp_params):
+        model = auto_wrap(
+            model,
+            auto_wrap_policy=partial(default_auto_wrap_policy, recurse=True, min_num_params=1e6)
+        )
     model = model.to(device)
-    
+    if rank == 0:
+        print(model)
     optim = torch.optim.Adam(model.parameters(), lr=1e-4)
 
     if rank == 0:
@@ -94,7 +105,7 @@ def main(args):
     model.train()
     def random_batch():
         b = args.batch_size_per_rank
-        batch = torch.randint(0, 1024, (args.seq_len, b), dtype=torch.long)
+        batch = torch.randint(0, 1024, (b, args.seq_len), dtype=torch.long)
         batch = batch.to(device)
         return batch
     

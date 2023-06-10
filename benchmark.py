@@ -246,8 +246,8 @@ if __name__ == "__main__":
         args.virtual_pipeline_model_parallel_size = args.num_layers // args.transformer_pipeline_model_parallel_size // args.num_layers_per_virtual_pipeline_stage
     set_args(args)
 
-    try:
-        main(args)
-    except Exception:
-        if rank == 0:
-            print("Error")
+    #try:
+    main(args)
+    #except Exception:
+    #    if rank == 0:
+    #        print("Error")
