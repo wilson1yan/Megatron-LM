@@ -89,7 +89,7 @@ def flops_dit_block(hidden_size, seq_len, n_heads):
     flops += 3 * 4 * seq_len * hidden_size # mod + gating for each
 
     flops += flops_attn(hidden_size, seq_len, n_heads)
-    flops += flops_cross_attn(hidden_size, 2048, seq_len, 128)
+    flops += flops_cross_attn(hidden_size, hidden_size, seq_len, 128)
     flops += flops_mlp(hidden_size, seq_len)
     return flops
 

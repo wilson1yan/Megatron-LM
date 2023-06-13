@@ -60,7 +60,7 @@ def estimate_flops():
     B = args.batch_size_per_rank
 
     from tfm_flops import flops_dit
-    return flops_dit(h, s, l)
+    return flops_dit(h, s, l) * 4
     
     # return 96 * B * s * l * h ** 2 * (1 + s / (6 * h) + V / (16 * l * h)) * mpu.get_data_parallel_world_size()
 

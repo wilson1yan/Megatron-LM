@@ -834,9 +834,11 @@ class ParallelTransformerLayer(MegatronModule):
         else:
             self.retriever = None
 
-        self.mlp = torch.nn.Sequential(
+        self.T = mpu.get_tensor_model_parallel_world_size()
+        self.c_mlp = torch.nn.Sequential(
             torch.nn.GELU(),
-            ColumnParallelLinear(args.hidden_size, 9 * args.hidden_size, gather_output=True)
+#            ColumnParallelLinear(args.hidden_size, 9 * args.hidden_size, gather_output=False)
+            torch.nn.Linear(args.hidden_size, 9 * args.hidden_size // self.T),
         )
 
         
@@ -1057,12 +1059,11 @@ class ParallelTransformerLayer(MegatronModule):
                 inference_params=None,
                 rotary_pos_emb=None):
         # hidden_states: [s, b, h]
-        c = self.mlp(c)
         (
             shift_msa, scale_msa, gate_msa,
             shift_ca, scale_ca, gate_ca,
             shift_mlp, scale_mlp, gate_mlp
-        ) = self.mlp(c).chunk(9, dim=1)
+        ) = self.c_mlp(c).repeat(1, 1, self.T).chunk(9, dim=-1)
 
 
         # Layer norm at the beginning of the transformer layer.
@@ -1156,7 +1157,7 @@ class ParallelTransformerLayer(MegatronModule):
 
         # MLP.
         mlp_output, mlp_bias = self.mlp(modulate(layernorm_output, shift_mlp, scale_mlp))
-        out_m = gate_mlp * (mlp_output + mlp_bias)
+        out_m = gate_mlp * mlp_output # (mlp_output + mlp_bias)
 
         # Second residual connection.
         # if self.apply_residual_connection_post_layernorm:
@@ -1594,10 +1595,6 @@ class ParallelTransformer(MegatronModule):
                 inference_params=None,
                 rotary_pos_emb=None):
         # hidden_states: [s, b, h]
-        c = torch.randn(hidden_states.shape[1], hidden_states.shape[2],
-                        dtype=hidden_states.dtype, device=hidden_states.device)
-        encoder_output = torch.randn(128, hidden_states.shape[1], 2048,
-                                     dtype=hidden_states.dtype, device=hidden_states.device)
 
         # Checks.
         if inference_params:
@@ -1607,6 +1604,12 @@ class ParallelTransformer(MegatronModule):
         if not self.pre_process:
             # See set_input_tensor()
             hidden_states = self.input_tensor
+
+
+        c = torch.randn(hidden_states.shape[1], hidden_states.shape[2],
+                        dtype=hidden_states.dtype, device=hidden_states.device)
+        encoder_output = torch.randn(128, hidden_states.shape[1], hidden_states.shape[2],
+                                     dtype=hidden_states.dtype, device=hidden_states.device)
 
         # Viewless tensor.
         # - We only need to create a viewless tensor in the case of micro batch
