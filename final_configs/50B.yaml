@@ -1,0 +1,8 @@
+num_layers: 64
+hidden_size: 9216
+ffn_hidden_size: 36864
+num_attention_heads: 48
+kv_channels: 192
+
+batch_size_per_rank: 32
+mp_devices: 256

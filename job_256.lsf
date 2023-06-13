@@ -1,9 +1,9 @@
 #!/bin/bash
 #BSUB -P csc529
-#BSUB -o node64_%J.txt
+#BSUB -o node256_%J.txt
 #BSUB -W 2:00
 #BSUB -q debug
-#BSUB -nnodes 64
+#BSUB -nnodes 256
 
 module load open-ce/1.5.2-py38-0
 
@@ -15,7 +15,7 @@ export CUDA_DEVICE_MAX_CONNECTIONS=1
 CFG=50B
 let d=NODES*6
 
-for t in 16; do
+for t in 24 48; do
 	let p=d/t
 	echo "n_devices: $d, tensor_parallel: $t, pipeline_parallel: $p"
 	jsrun -n${NODES} -a6 -c42 -g6 -r1 --smpiargs "off" --bind=proportional-packed:7 python benchmark.py --tensor-model-parallel-size $t --no-gradient-accumulation-fusion --seq_len 2048 --config configs/$CFG.yaml --batch-size-per-rank 64 --n-microbatches 64 --pipeline-model-parallel-size $p  --fp16 --recompute-activations --recompute-granularity selective
