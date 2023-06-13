@@ -17,6 +17,17 @@ def flops_attn(hidden_size, seq_len, n_heads):
     flops += seq_len * hidden_size # residual
     return flops
 
+def flops_cross_attn(hidden_size, cross_attn_size, seq_len, cross_attn_seq_len):
+    flops = 0
+    flops += LAYERNORM * hidden_size * seq_len
+    flops += flops_matmul(seq_len, hidden_size, hidden_size) # Q
+    flops += flops_matmul(cross_attn_seq_len, cross_attn_size, 2 * hidden_size) # KV
+    flops += flops_matmul(seq_len, hidden_size, cross_attn_seq_len)
+    flops += flops_matmul(seq_len, cross_attn_seq_len, hidden_size)
+    flops += flops_matmul(seq_len, hidden_size, hidden_size)
+    flops += seq_len * hidden_size
+    return flops
+
 def flops_attn_fused(hidden_size, seq_len, n_heads, chunk_size, n_timesteps):
     n_blocks = max(1, seq_len // chunk_size)
     spatial_dim = seq_len // n_timesteps
@@ -72,3 +83,15 @@ def flops_block2(hidden_size, seq_len, n_heads, chunk_size, n_timesteps):
 def flops_tfm2(hidden_size, seq_len, n_heads, chunk_size, n_timesteps, num_layers):
     return flops_block2(hidden_size, seq_len, n_heads, chunk_size, n_timesteps) * num_layers
 
+def flops_dit_block(hidden_size, seq_len, n_heads):
+    flops = 0
+    flops += flops_matmul(1, hidden_size, 9 * hidden_size) # MLP c
+    flops += 3 * 4 * seq_len * hidden_size # mod + gating for each
+
+    flops += flops_attn(hidden_size, seq_len, n_heads)
+    flops += flops_cross_attn(hidden_size, 2048, seq_len, 128)
+    flops += flops_mlp(hidden_size, seq_len)
+    return flops
+
+def flops_dit(hidden_size, seq_len, num_layers):
+    return flops_dit_block(hidden_size, seq_len, None) * num_layers

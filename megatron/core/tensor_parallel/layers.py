@@ -28,6 +28,7 @@ from .mappings import (
     reduce_from_tensor_model_parallel_region,
     scatter_to_tensor_model_parallel_region,
     reduce_scatter_to_sequence_parallel_region,
+    _reduce,
 )
 
 from .random import get_cuda_rng_tracker
@@ -705,8 +706,11 @@ class RowParallelLinear(torch.nn.Module):
         # All-reduce across all the partitions.
         if self.sequence_parallel_enabled:
             output_ = reduce_scatter_to_sequence_parallel_region(output_parallel)
+            assert False
         else:
-            output_ = reduce_from_tensor_model_parallel_region(output_parallel)
+            # output_ = reduce_from_tensor_model_parallel_region(output_parallel)
+            output_ = output_parallel
+
         if not self.skip_bias_add:
             output = output_ + self.bias if self.bias is not None else output_
             output_bias = None

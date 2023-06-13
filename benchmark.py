@@ -1,5 +1,6 @@
 import os
 from functools import partial
+from re import T
 print = partial(print, flush=True)
 
 import math
@@ -57,7 +58,13 @@ def estimate_flops():
     V = 2048
     s = args.seq_len
     B = args.batch_size_per_rank
-    return 96 * B * s * l * h ** 2 * (1 + s / (6 * h) + V / (16 * l * h)) * mpu.get_data_parallel_world_size()
+
+    from tfm_flops import flops_dit
+    return flops_dit(h, s, l)
+    
+    # return 96 * B * s * l * h ** 2 * (1 + s / (6 * h) + V / (16 * l * h)) * mpu.get_data_parallel_world_size()
+
+
 
 
 def main(args):
@@ -66,7 +73,7 @@ def main(args):
     dist.init_process_group('nccl', world_size=size, rank=rank)
 
     init_head_parallel()
-    mpu.initialize_model_parallel(args.tensor_model_parallel_size, args.pipeline_model_parallel_size, args.virtual_pipeline_model_parallel_size)
+    mpu.initialize_model_parallel(args.tensor_model_parallel_size, args.pipeline_model_parallel_size)
     if rank == 0:
         print(f'> initialized data model parallel with size '
               f'{mpu.get_data_parallel_world_size()}')
@@ -77,23 +84,10 @@ def main(args):
 
 #    set_jit_fusion_options()
 
-    if mpu.get_pipeline_model_parallel_world_size() > 1 and args.virtual_pipeline_model_parallel_size is not None:
-        model = []
-        for i in range(args.virtual_pipeline_model_parallel_size):
-            mpu.set_virtual_pipelien_model_parallel_rank(i)
-            pre_process = mpu.is_pipeline_first_stage()
-            post_process = mpu.is_pipeline_last_stage()
-            this_model = model_provider_func(
-                pre_process=pre_process,
-                post_process=post_process
-            )
-            this_model.model_type = ModelType.encoder_or_decoder
-            model.append(this_model)
-    else:
-        pre_process = mpu.is_pipeline_first_stage()
-        post_process = mpu.is_pipeline_last_stage()
-        model = GPTModel(pre_process=pre_process, post_process=post_process)
-        model = [model]
+    pre_process = mpu.is_pipeline_first_stage()
+    post_process = mpu.is_pipeline_last_stage()
+    model = GPTModel(pre_process=pre_process, post_process=post_process)
+    model = [model]
 
     for m in model:
         for param in m.parameters():
@@ -242,8 +236,6 @@ if __name__ == "__main__":
     args.virtual_pipeline_model_parallel_size = None
     args.encoder_num_layers = args.num_layers
     args.transformer_pipeline_model_parallel_size = args.pipeline_model_parallel_size
-    if args.num_layers_per_virtual_pipeline_stage is not None:
-        args.virtual_pipeline_model_parallel_size = args.num_layers // args.transformer_pipeline_model_parallel_size // args.num_layers_per_virtual_pipeline_stage
     set_args(args)
 
     #try:
