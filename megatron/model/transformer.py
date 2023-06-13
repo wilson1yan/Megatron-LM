@@ -835,11 +835,11 @@ class ParallelTransformerLayer(MegatronModule):
             self.retriever = None
 
         self.T = mpu.get_tensor_model_parallel_world_size()
-        self.c_mlp = torch.nn.Sequential(
-            torch.nn.GELU(),
+#        self.c_mlp = torch.nn.Sequential(
+#            torch.nn.GELU(),
 #            ColumnParallelLinear(args.hidden_size, 9 * args.hidden_size, gather_output=False)
-            torch.nn.Linear(args.hidden_size, 9 * args.hidden_size // self.T),
-        )
+#            torch.nn.Linear(args.hidden_size, 9 * args.hidden_size // self.T),
+#        )
 
         
 
@@ -1059,11 +1059,11 @@ class ParallelTransformerLayer(MegatronModule):
                 inference_params=None,
                 rotary_pos_emb=None):
         # hidden_states: [s, b, h]
-        (
-            shift_msa, scale_msa, gate_msa,
-            shift_ca, scale_ca, gate_ca,
-            shift_mlp, scale_mlp, gate_mlp
-        ) = self.c_mlp(c).repeat(1, 1, self.T).chunk(9, dim=-1)
+        #(
+        #    shift_msa, scale_msa, gate_msa,
+        #    shift_ca, scale_ca, gate_ca,
+        #    shift_mlp, scale_mlp, gate_mlp
+        #) = self.c_mlp(c).repeat(1, 1, self.T).chunk(9, dim=-1)
 
 
         # Layer norm at the beginning of the transformer layer.
@@ -1072,11 +1072,13 @@ class ParallelTransformerLayer(MegatronModule):
         # Self attention.
         attention_output, attention_bias = \
             self.self_attention(
-                modulate(layernorm_output, shift_msa, scale_msa),
+                #modulate(layernorm_output, shift_msa, scale_msa),
+                layernorm_output,
                 attention_mask,
                 inference_params=inference_params,
                 rotary_pos_emb=rotary_pos_emb)
-        out_a = gate_msa * (attention_output + attention_bias)
+        out_a = attention_output + attention_bias
+        #out_a = gate_msa * (attention_output + attention_bias)
 
         # # Residual connection.
         # if self.apply_residual_connection_post_layernorm:
@@ -1120,9 +1122,12 @@ class ParallelTransformerLayer(MegatronModule):
                 encoder_output,
                 enc_dec_attn_mask,
                 layernorm_output,
-                modulate(layernorm_output, shift_ca, scale_ca),
+                layernorm_output,
+#                modulate(layernorm_output, shift_ca, scale_ca),
                 bias_dropout_add_fused_train)
-        out_c = gate_ca * layernorm_output
+        out_c = layernorm_output
+        #out_c = gate_ca * layernorm_output
+
         # if self.layer_type == LayerType.encoder:
         #     pass
         # elif self.layer_type == LayerType.decoder:
@@ -1156,8 +1161,10 @@ class ParallelTransformerLayer(MegatronModule):
         #                     self.layer_type.name)
 
         # MLP.
-        mlp_output, mlp_bias = self.mlp(modulate(layernorm_output, shift_mlp, scale_mlp))
-        out_m = gate_mlp * mlp_output # (mlp_output + mlp_bias)
+#        mlp_output, mlp_bias = self.mlp(modulate(layernorm_output, shift_mlp, scale_mlp))
+        mlp_output, mlp_bias = self.mlp(layernorm_output)
+        out_m = mlp_output
+#        out_m = gate_mlp * mlp_output # (mlp_output + mlp_bias)
 
         # Second residual connection.
         # if self.apply_residual_connection_post_layernorm:
@@ -1198,7 +1205,7 @@ class ParallelTransformerLayer(MegatronModule):
         # else:
         #     return output
 
-        out = out_m + out_c + out_a
+        out = out_m + out_a# + out_c
         out = reduce_from_tensor_model_parallel_region(out)
         return hidden_states + out
 
